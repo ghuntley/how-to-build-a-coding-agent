@@ -5,6 +5,8 @@ go 1.24.2
 require (
 	github.com/anthropics/anthropic-sdk-go v1.6.2
 	github.com/invopop/jsonschema v0.13.0
+	github.com/stripe/stripe-go/v76 v76.25.0
+	golang.org/x/crypto v0.41.0
 )
 
 require (

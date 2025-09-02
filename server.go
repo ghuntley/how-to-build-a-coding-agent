@@ -28,8 +28,9 @@ type Server struct {
 	verbose    bool
 	sessions   map[string][]anthropic.MessageParam
 	sessionsMu sync.RWMutex
-	model      string
+	model      anthropic.Model
 	maxTokens  int64
+	userStore  *UserStore
 }
 
 type MessageRequest struct {
@@ -74,9 +75,9 @@ func main() {
 	}
 
 	// Resolve model and max tokens from flags/env
-	model := strings.TrimSpace(*modelFlag)
+	model := anthropic.Model(strings.TrimSpace(*modelFlag))
 	if model == "" {
-		model = strings.TrimSpace(os.Getenv("ANTHROPIC_MODEL"))
+		model = anthropic.Model(strings.TrimSpace(os.Getenv("ANTHROPIC_MODEL")))
 	}
 	if model == "" {
 		model = anthropic.ModelClaude3_7SonnetLatest
@@ -94,6 +95,16 @@ func main() {
 		log.Printf("Initialized %d tools", len(tools))
 	}
 
+	// Initialize user store
+	userStorePath := strings.TrimSpace(os.Getenv("USER_STORE_PATH"))
+	if userStorePath == "" {
+		userStorePath = "data/users.json"
+	}
+	us, err := NewUserStore(userStorePath)
+	if err != nil {
+		log.Fatalf("failed to init user store: %v", err)
+	}
+
 	s := &Server{
 		client:    &client,
 		tools:     tools,
@@ -101,10 +112,24 @@ func main() {
 		sessions:  make(map[string][]anthropic.MessageParam),
 		model:     model,
 		maxTokens: maxTokens,
+		userStore: us,
 	}
+
+	// Init Stripe if configured
+	s.initStripeFromEnv()
 
 	http.HandleFunc("/api/session", s.handleNewSession)
 	http.HandleFunc("/api/message", s.handleMessage)
+
+	// Auth endpoints
+	http.HandleFunc("/api/signup", s.handleSignup)
+	http.HandleFunc("/api/login", s.handleLogin)
+	http.HandleFunc("/api/me", s.handleMe)
+
+	// Billing endpoints
+	http.HandleFunc("/api/checkout", s.handleCheckout)
+	http.HandleFunc("/api/portal", s.handlePortal)
+	http.HandleFunc("/api/stripe/webhook", s.handleStripeWebhook)
 
 	// Serve static UI from ./web
 	fs := http.FileServer(http.Dir("web"))
@@ -133,6 +158,18 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	// Require authenticated and subscribed user
+	user, err := s.getUserFromRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	if !user.SubscriptionOK {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "subscription required"})
+		return
+	}
 	defer r.Body.Close()
 	var req MessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -159,6 +196,102 @@ func (s *Server) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, resp)
+}
+
+// -----------
+// Auth & Utils
+// -----------
+
+type authRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "email and password required"})
+		return
+	}
+	user, err := s.userStore.CreateUser(req.Email, req.Password)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	claims := JWTClaims{Subject: user.ID, Email: user.Email, Exp: time.Now().Add(30 * 24 * time.Hour).Unix()}
+	tok, err := createJWT(claims)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create token"})
+		return
+	}
+	writeJSON(w, map[string]any{"token": tok, "user": map[string]any{"email": user.Email, "subscription_ok": user.SubscriptionOK}})
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "email and password required"})
+		return
+	}
+	user, err := s.userStore.Authenticate(req.Email, req.Password)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
+		return
+	}
+	claims := JWTClaims{Subject: user.ID, Email: user.Email, Exp: time.Now().Add(30 * 24 * time.Hour).Unix()}
+	tok, err := createJWT(claims)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create token"})
+		return
+	}
+	writeJSON(w, map[string]any{"token": tok, "user": map[string]any{"email": user.Email, "subscription_ok": user.SubscriptionOK}})
+}
+
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, err := s.getUserFromRequest(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+	writeJSON(w, map[string]any{"email": user.Email, "subscription_ok": user.SubscriptionOK})
+}
+
+func (s *Server) getUserFromRequest(r *http.Request) (*User, error) {
+	auth := r.Header.Get("Authorization")
+	if auth == "" { return nil, fmt.Errorf("no auth header") }
+	parts := strings.SplitN(auth, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") { return nil, fmt.Errorf("invalid auth header") }
+	claims, err := parseAndValidateJWT(parts[1])
+	if err != nil { return nil, err }
+	user := s.userStore.GetByEmail(claims.Email)
+	if user == nil { return nil, fmt.Errorf("user not found") }
+	return user, nil
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func (s *Server) processUserMessage(ctx context.Context, sessionID, userInput string) (*MessageResponse, error) {

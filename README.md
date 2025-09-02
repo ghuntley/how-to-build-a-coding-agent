@@ -195,6 +195,53 @@ go run code_search_tool.go
 
 ## 🛠️ Tool System Architecture
 
+### Authentication & Subscriptions
+
+The server now supports JWT-based authentication and a subscription paywall backed by Stripe.
+
+Endpoints:
+
+- POST `/api/signup`: `{ email, password }` → `{ token, user }`
+- POST `/api/login`: `{ email, password }` → `{ token, user }`
+- GET `/api/me`: Requires `Authorization: Bearer <token>` → `{ email, subscription_ok }`
+- POST `/api/checkout`: Requires auth → returns `{ url }` to Stripe Checkout
+- POST `/api/portal`: Requires auth → returns `{ url }` to Stripe Billing Portal
+- POST `/api/stripe/webhook`: Stripe event receiver (configure your webhook to point here)
+
+Paywall:
+
+- The chat endpoint `POST /api/message` now requires a valid JWT and an active subscription. It returns HTTP 401 if unauthenticated and 402 if a subscription is required.
+
+Frontend:
+
+- Minimal controls added to the header to login, signup, subscribe, manage billing, and logout. Token is persisted in `localStorage` and sent as `Authorization: Bearer` for API calls.
+
+Environment variables:
+
+- `JWT_SECRET` (required): HMAC secret for signing JWTs
+- `USER_STORE_PATH` (optional, default `data/users.json`)
+- `STRIPE_SECRET_KEY` (required for billing)
+- `STRIPE_PRICE_ID` (required): The Price ID for your subscription product
+- `STRIPE_WEBHOOK_SECRET` (recommended): Validates webhook signatures
+- `PUBLIC_URL` (optional): Base URL for success/return links, default `/`
+
+Run the server:
+
+```bash
+JWT_SECRET=change-me \
+STRIPE_SECRET_KEY=sk_test_... \
+STRIPE_PRICE_ID=price_... \
+STRIPE_WEBHOOK_SECRET=whsec_... \
+go build -o server server.go auth.go billing.go && ./server --verbose
+```
+
+Stripe webhook (example with Stripe CLI):
+
+```bash
+stripe listen --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed --forward-to localhost:8080/api/stripe/webhook
+```
+
+
 The tool system uses a consistent pattern across all applications:
 
 ```mermaid

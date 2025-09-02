@@ -37,6 +37,10 @@ h1 {
 
 .status { color: var(--muted); font-size: 12px; }
 
+.auth-controls { display: flex; align-items: center; gap: 8px; }
+.auth-controls button { font-size: 12px; padding: 6px 10px; }
+.auth-controls #user-email { color: var(--muted); font-size: 12px; margin-right: 6px; }
+
 main { height: calc(100vh - 58px); display: flex; flex-direction: column; }
 
 .messages {
