@@ -309,10 +309,10 @@ type BashInput struct {
 var BashInputSchema = GenerateSchema[BashInput]()
 
 type CodeSearchInput struct {
-	Pattern   string `json:"pattern" jsonschema_description:"The search pattern or regex to look for"`
-	Path      string `json:"path,omitempty" jsonschema_description:"Optional path to search in (file or directory)"`
-	FileType  string `json:"file_type,omitempty" jsonschema_description:"Optional file extension to limit search to (e.g., 'go', 'js', 'py')"`
-	CaseSensitive bool `json:"case_sensitive,omitempty" jsonschema_description:"Whether the search should be case sensitive (default: false)"`
+	Pattern       string `json:"pattern" jsonschema_description:"The search pattern or regex to look for"`
+	Path          string `json:"path,omitempty" jsonschema_description:"Optional path to search in (file or directory)"`
+	FileType      string `json:"file_type,omitempty" jsonschema_description:"Optional file extension to limit search to (e.g., 'go', 'js', 'py')"`
+	CaseSensitive bool   `json:"case_sensitive,omitempty" jsonschema_description:"Whether the search should be case sensitive (default: false)"`
 }
 
 var CodeSearchInputSchema = GenerateSchema[CodeSearchInput]()
@@ -430,7 +430,7 @@ func CodeSearch(input json.RawMessage) (string, error) {
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.Output()
-	
+
 	// ripgrep returns exit code 1 when no matches are found, which is not an error
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
@@ -443,14 +443,14 @@ func CodeSearch(input json.RawMessage) (string, error) {
 
 	result := strings.TrimSpace(string(output))
 	lines := strings.Split(result, "\n")
-	
+
 	log.Printf("Found %d matches for pattern: %s", len(lines), codeSearchInput.Pattern)
-	
+
 	// Limit output to prevent overwhelming responses
 	if len(lines) > 50 {
 		result = strings.Join(lines[:50], "\n") + fmt.Sprintf("\n... (showing first 50 of %d matches)", len(lines))
 	}
-	
+
 	return result, nil
 }
 

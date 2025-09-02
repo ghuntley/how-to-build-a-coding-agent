@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Coding Agent UI</title>
+	<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+	<header>
+		<h1>Coding Agent</h1>
+		<div class="status" id="status">Disconnected</div>
+	</header>
+	<main>
+		<div id="messages" class="messages"></div>
+		<form id="chat-form" class="composer">
+			<input id="input" type="text" placeholder="Type a message..." autocomplete="off" />
+			<button id="send" type="submit">Send</button>
+		</form>
+	</main>
+	<script src="/app.js"></script>
+</body>
+</html>
+

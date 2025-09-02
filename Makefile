@@ -1,7 +1,7 @@
 .PHONY: build fmt check clean all
 
 # Go binaries to build
-BINARIES := bash_tool chat edit_tool list_files read
+BINARIES := bash_tool chat edit_tool list_files read server
 
 # Build all binaries
 build:
@@ -11,6 +11,7 @@ build:
 	go build -o edit_tool edit_tool.go
 	go build -o list_files list_files.go
 	go build -o read read.go
+	go build -o server server.go
 
 # Format all Go files
 fmt:
