@@ -125,11 +125,11 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) runInference(ctx context.Context, conversation []anthropic.MessageParam) (*anthropic.Message, error) {
 	if a.verbose {
-		log.Printf("Making API call to Claude with model: %s", anthropic.ModelClaude3_7SonnetLatest)
+		log.Printf("Making API call to Claude with model: %s", anthropic.ModelClaudeSonnet4_20250514)
 	}
 
 	message, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaude3_7SonnetLatest,
+		Model:     anthropic.ModelClaudeSonnet4_20250514,
 		MaxTokens: int64(1024),
 		Messages:  conversation,
 	})
