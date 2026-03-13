@@ -119,7 +119,7 @@ graph TB
 ### ✅ Prerequisites
 
 * Go 1.24.2+ or [devenv](https://devenv.sh/) (recommended for easy setup)
-* An [Anthropic API Key](https://www.anthropic.com/product/claude)
+* An [Anthropic API Key](https://platform.claude.com/settings/keys)
 
 ### 🔧 Set Up Your Environment
 
