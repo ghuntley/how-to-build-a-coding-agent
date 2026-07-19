@@ -316,6 +316,7 @@ Once you complete the workshop, try building:
 * Memory features (remember things across sessions)
 * A web UI for your agent
 * Integration with other AI models
+* Explore Roo Code's community successor, [Zoo Code](https://zoocode.dev/)
 
 ---
 
