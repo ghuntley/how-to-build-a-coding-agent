@@ -9,6 +9,13 @@ import (
 	"os"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+)
+
+const (
+	minimaxAnthropicBaseURL = "https://api.minimax.io/anthropic"
+	minimaxDefaultModel     = anthropic.Model("MiniMax-M3")
+	minimaxFallbackModel    = anthropic.Model("MiniMax-M2.7")
 )
 
 func main() {
@@ -25,9 +32,9 @@ func main() {
 		log.SetPrefix("")
 	}
 
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	if *verbose {
-		log.Println("Anthropic client initialized")
+		log.Println("API client initialized")
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -42,6 +49,21 @@ func main() {
 	err := agent.Run(context.TODO())
 	if err != nil {
 		fmt.Printf("Error: %s\n", err.Error())
+	}
+}
+
+func newAnthropicClient() anthropic.Client {
+	return anthropic.NewClient(option.WithBaseURL(minimaxAnthropicBaseURL))
+}
+
+func selectedModel() anthropic.Model {
+	switch model := os.Getenv("ANTHROPIC_MODEL"); model {
+	case string(minimaxFallbackModel):
+		return minimaxFallbackModel
+	case string(minimaxDefaultModel), "":
+		return minimaxDefaultModel
+	default:
+		return minimaxDefaultModel
 	}
 }
 
@@ -65,7 +87,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	if a.verbose {
 		log.Println("Starting chat session")
 	}
-	fmt.Println("Chat with Claude (use 'ctrl-c' to quit)")
+	fmt.Println("Chat with the assistant (use 'ctrl-c' to quit)")
 
 	for {
 		fmt.Print("\u001b[94mYou\u001b[0m: ")
@@ -93,7 +115,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		conversation = append(conversation, userMessage)
 
 		if a.verbose {
-			log.Printf("Sending message to Claude, conversation length: %d", len(conversation))
+			log.Printf("Sending message to the assistant, conversation length: %d", len(conversation))
 		}
 
 		message, err := a.runInference(ctx, conversation)
@@ -106,13 +128,13 @@ func (a *Agent) Run(ctx context.Context) error {
 		conversation = append(conversation, message.ToParam())
 
 		if a.verbose {
-			log.Printf("Received response from Claude with %d content blocks", len(message.Content))
+			log.Printf("Received response from the assistant with %d content blocks", len(message.Content))
 		}
 
 		for _, content := range message.Content {
 			switch content.Type {
 			case "text":
-				fmt.Printf("\u001b[93mClaude\u001b[0m: %s\n", content.Text)
+				fmt.Printf("\u001b[93mAssistant\u001b[0m: %s\n", content.Text)
 			}
 		}
 	}
@@ -124,12 +146,13 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) runInference(ctx context.Context, conversation []anthropic.MessageParam) (*anthropic.Message, error) {
+	model := selectedModel()
 	if a.verbose {
-		log.Printf("Making API call to Claude with model: %s", anthropic.ModelClaudeOpus4_6)
+		log.Printf("Making API call with model: %s", model)
 	}
 
 	message, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_6,
+		Model:     model,
 		MaxTokens: int64(1024),
 		Messages:  conversation,
 	})
