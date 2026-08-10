@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	minimaxAnthropicBaseURL = "https://api.minimax.io/anthropic"
-	minimaxDefaultModel     = anthropic.Model("MiniMax-M3")
-	minimaxFallbackModel    = anthropic.Model("MiniMax-M2.7")
+	minimaxAnthropicBaseURL      = "https://api.minimax.io/anthropic"
+	minimaxChinaAnthropicBaseURL = "https://api.minimaxi.com/anthropic"
+	minimaxDefaultModel          = anthropic.Model("MiniMax-M3")
+	minimaxFallbackModel         = anthropic.Model("MiniMax-M2.7")
 )
 
 func main() {
@@ -61,7 +62,16 @@ func main() {
 }
 
 func newAnthropicClient() anthropic.Client {
-	return anthropic.NewClient(option.WithBaseURL(minimaxAnthropicBaseURL))
+	return anthropic.NewClient(option.WithBaseURL(selectedBaseURL()))
+}
+
+func selectedBaseURL() string {
+	switch baseURL := os.Getenv("ANTHROPIC_BASE_URL"); baseURL {
+	case minimaxAnthropicBaseURL, minimaxChinaAnthropicBaseURL:
+		return baseURL
+	default:
+		return minimaxAnthropicBaseURL
+	}
 }
 
 func selectedModel() anthropic.Model {
