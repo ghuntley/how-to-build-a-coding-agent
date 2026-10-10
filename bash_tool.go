@@ -13,7 +13,15 @@ import (
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/invopop/jsonschema"
+)
+
+const (
+	minimaxAnthropicBaseURL      = "https://api.minimax.io/anthropic"
+	minimaxChinaAnthropicBaseURL = "https://api.minimaxi.com/anthropic"
+	minimaxDefaultModel          = anthropic.Model("MiniMax-M3")
+	minimaxFallbackModel         = anthropic.Model("MiniMax-M2.7")
 )
 
 func main() {
@@ -30,9 +38,9 @@ func main() {
 		log.SetPrefix("")
 	}
 
-	client := anthropic.NewClient()
+	client := newAnthropicClient()
 	if *verbose {
-		log.Println("Anthropic client initialized")
+		log.Println("API client initialized")
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -51,6 +59,30 @@ func main() {
 	err := agent.Run(context.TODO())
 	if err != nil {
 		fmt.Printf("Error: %s\n", err.Error())
+	}
+}
+
+func newAnthropicClient() anthropic.Client {
+	return anthropic.NewClient(option.WithBaseURL(selectedBaseURL()))
+}
+
+func selectedBaseURL() string {
+	switch baseURL := os.Getenv("ANTHROPIC_BASE_URL"); baseURL {
+	case minimaxAnthropicBaseURL, minimaxChinaAnthropicBaseURL:
+		return baseURL
+	default:
+		return minimaxAnthropicBaseURL
+	}
+}
+
+func selectedModel() anthropic.Model {
+	switch model := os.Getenv("ANTHROPIC_MODEL"); model {
+	case string(minimaxFallbackModel):
+		return minimaxFallbackModel
+	case string(minimaxDefaultModel), "":
+		return minimaxDefaultModel
+	default:
+		return minimaxDefaultModel
 	}
 }
 
@@ -81,7 +113,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	if a.verbose {
 		log.Println("Starting chat session with tools enabled")
 	}
-	fmt.Println("Chat with Claude (use 'ctrl-c' to quit)")
+	fmt.Println("Chat with the assistant (use 'ctrl-c' to quit)")
 
 	for {
 		fmt.Print("\u001b[94mYou\u001b[0m: ")
@@ -109,7 +141,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		conversation = append(conversation, userMessage)
 
 		if a.verbose {
-			log.Printf("Sending message to Claude, conversation length: %d", len(conversation))
+			log.Printf("Sending message to the assistant, conversation length: %d", len(conversation))
 		}
 
 		message, err := a.runInference(ctx, conversation)
@@ -121,20 +153,20 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 		conversation = append(conversation, message.ToParam())
 
-		// Keep processing until Claude stops using tools
+		// Keep processing until the assistant stops using tools
 		for {
 			// Collect all tool uses and their results
 			var toolResults []anthropic.ContentBlockParamUnion
 			var hasToolUse bool
 
 			if a.verbose {
-				log.Printf("Processing %d content blocks from Claude", len(message.Content))
+				log.Printf("Processing %d content blocks from the assistant", len(message.Content))
 			}
 
 			for _, content := range message.Content {
 				switch content.Type {
 				case "text":
-					fmt.Printf("\u001b[93mClaude\u001b[0m: %s\n", content.Text)
+					fmt.Printf("\u001b[93mAssistant\u001b[0m: %s\n", content.Text)
 				case "tool_use":
 					hasToolUse = true
 					toolUse := content.AsToolUse()
@@ -188,14 +220,14 @@ func (a *Agent) Run(ctx context.Context) error {
 				break
 			}
 
-			// Send all tool results back and get Claude's response
+			// Send all tool results back and get the assistant's response
 			if a.verbose {
-				log.Printf("Sending %d tool results back to Claude", len(toolResults))
+				log.Printf("Sending %d tool results back to the assistant", len(toolResults))
 			}
 			toolResultMessage := anthropic.NewUserMessage(toolResults...)
 			conversation = append(conversation, toolResultMessage)
 
-			// Get Claude's response after tool execution
+			// Get the assistant's response after tool execution
 			message, err = a.runInference(ctx, conversation)
 			if err != nil {
 				if a.verbose {
@@ -221,6 +253,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) runInference(ctx context.Context, conversation []anthropic.MessageParam) (*anthropic.Message, error) {
 	anthropicTools := []anthropic.ToolUnionParam{}
+	model := selectedModel()
 	for _, tool := range a.tools {
 		anthropicTools = append(anthropicTools, anthropic.ToolUnionParam{
 			OfTool: &anthropic.ToolParam{
@@ -232,11 +265,11 @@ func (a *Agent) runInference(ctx context.Context, conversation []anthropic.Messa
 	}
 
 	if a.verbose {
-		log.Printf("Making API call to Claude with model: %s and %d tools", anthropic.ModelClaudeOpus4_6, len(anthropicTools))
+		log.Printf("Making API call with model: %s and %d tools", model, len(anthropicTools))
 	}
 
 	message, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaudeOpus4_6,
+		Model:     model,
 		MaxTokens: int64(1024),
 		Messages:  conversation,
 		Tools:     anthropicTools,
