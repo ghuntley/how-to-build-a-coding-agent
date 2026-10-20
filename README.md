@@ -142,6 +142,25 @@ go mod tidy
 export ANTHROPIC_API_KEY="your-api-key-here"
 ```
 
+The standalone entrypoints default to `MiniMax-M3.1-Flash` at
+`https://api.minimax.io/anthropic`; use a MiniMax API key for that endpoint.
+Set `ANTHROPIC_MODEL=MiniMax-M3` to select the alternative model. For the
+China endpoint, set `ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic`.
+Explicit `ANTHROPIC_MODEL` and `ANTHROPIC_BASE_URL` values are passed through,
+including saved model IDs and custom compatible endpoints. To use the original
+workshop provider, set `ANTHROPIC_BASE_URL=https://api.anthropic.com` and
+`ANTHROPIC_MODEL=claude-opus-4-6` with its matching API key.
+
+The request tests run offline against a mocked HTTP transport. Since each
+workshop file is a standalone program, test them separately:
+
+```bash
+go test chat.go provider_test.go
+for file in read.go list_files.go bash_tool.go edit_tool.go code_search_tool.go; do
+  go test "$file" provider_test.go provider_tools_test.go
+done
+```
+
 ---
 
 ## 🏁 Start with the Basics
