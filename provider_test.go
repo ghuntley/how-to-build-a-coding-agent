@@ -96,7 +96,7 @@ func TestProviderRequest(t *testing.T) {
 func TestInferencePreservesContent(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ANTHROPIC_MODEL", "")
-	const input = `[{"role":"user","content":[{"type":"text","text":"inspect"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}}]},{"role":"assistant","content":[{"type":"thinking","thinking":"inspect the file","signature":"test-signature"},{"type":"tool_use","id":"tool_test","name":"read_file","input":{"path":"riddle.txt"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool_test","content":"file contents"}]}]`
+	const input = `[{"role":"user","content":[{"type":"text","text":"inspect"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}}]},{"role":"assistant","content":[{"type":"thinking","thinking":"inspect the file","signature":"test-signature"},{"type":"tool_use","id":"tool_test","name":"read_file","input":{"path":"riddle.txt"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool_test","content":[{"type":"text","text":"file contents"}]}]}]`
 	var messages []anthropic.MessageParam
 	if err := json.Unmarshal([]byte(input), &messages); err != nil {
 		t.Fatal(err)
